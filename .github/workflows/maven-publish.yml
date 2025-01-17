@@ -8,22 +8,28 @@ on:
     types: [released]
 
 jobs:
-  kc-version-matrix:
-    name: Get last 10 Keycloak versions
+  extract-version:
+    name: Extract Keycloak version from release tag
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      kc-version: ${{ steps.extract.outputs.kc_version }}
     steps:
-      - id: set-matrix
+      - name: Extract Keycloak version from release tag
+        id: extract
         run: |
-          VERSIONS=$( curl -L -s https://api.github.com/repos/keycloak/keycloak/tags | jq -c 'sort_by(.name)[-11:-1] | [ .[] | .version=.name | {version}]' )
-          echo "::set-output name=matrix::{\"include\":$VERSIONS}"
+          # Assuming the release tag is in the format "vXX.X.XX" or "vXX.XX.XX"
+          RELEASE_TAG=${{ github.event.release.tag_name }}
+          # Extract the version part from the release tag
+          if [[ "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::set-output name=kc_version::${BASH_REMATCH[1]}"
+          else
+            echo "Invalid release tag format: $RELEASE_TAG"
+            exit 1
+          fi
 
   build:
-    needs: kc-version-matrix
+    needs: extract-version
     runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{fromJson(needs.kc-version-matrix.outputs.matrix)}}
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 17
@@ -33,9 +39,9 @@ jobs:
           distribution: 'temurin'
           cache: maven
       - name: Set version
-        run: mvn versions:set -DnewVersion=$(git describe --tags)-KC${{ matrix.version }}
+        run: mvn versions:set -DnewVersion=$(git describe --tags)-KC${{ needs.extract-version.outputs.kc-version }}
       - name: Build with Maven
-        run: mvn -Dkeycloak.version=${{ matrix.version }} -B package --file pom.xml
+        run: mvn -Dkeycloak.version=${{ needs.extract-version.outputs.kc-version }} -B package --file pom.xml
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
