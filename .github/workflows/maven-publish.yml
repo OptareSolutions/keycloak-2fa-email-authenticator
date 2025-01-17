@@ -46,6 +46,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: target/keycloak-2fa-email-authenticator*
-          name: Keycloak 2FA Email Authenticator v${{ github.event.release.tag_name }}
+          name: Keycloak 2FA Email Authenticator ${{ github.event.release.tag_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
