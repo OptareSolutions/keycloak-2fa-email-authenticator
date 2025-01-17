@@ -39,7 +39,7 @@ jobs:
           distribution: 'temurin'
           cache: maven
       - name: Set version
-        run: mvn versions:set -DnewVersion=$(git describe --tags)-KC${{ needs.extract-version.outputs.kc-version }}
+        run: mvn versions:set -DnewVersion=KC${{ needs.extract-version.outputs.kc-version }}
       - name: Build with Maven
         run: mvn -Dkeycloak.version=${{ needs.extract-version.outputs.kc-version }} -B package --file pom.xml
       - name: Release
