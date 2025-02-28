@@ -31,4 +31,3 @@ jobs:
           workflow: 'test.yml'
           timezone: 'Europe/Madrid' # US/Central, US/Pacific
           inputs: ${{ toJson(github.event.inputs) }}
-          wait-ms: 45000
