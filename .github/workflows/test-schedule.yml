@@ -11,6 +11,10 @@ on:
         required: true
         type: string
         default: 'in 1 minute'
+      app:
+        description: 'App to deploy (e.g: myapp:2.0.4)'
+        required: true
+        type: string
 concurrency:
   group: schedule${{ github.event.inputs.date }}
   cancel-in-progress: true
@@ -26,5 +30,5 @@ jobs:
           date: ${{ github.event.inputs.date }}
           workflow: 'test.yml'
           timezone: 'Europe/Madrid' # US/Central, US/Pacific
-          inputs: '{"app": "test:1.2.3"}'
+          inputs: ${{ toJson(github.event.inputs) }}
           wait-ms: 45000
