@@ -3,7 +3,7 @@ on:
   push:
   pull_request:
   schedule:
-    - cron: '* * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       date:
@@ -27,3 +27,4 @@ jobs:
           workflow: 'test.yml'
           timezone: 'Europe/Madrid' # US/Central, US/Pacific
           inputs: '{"app": "test:1.2.3"}'
+          wait-ms: 45000
