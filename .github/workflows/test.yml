@@ -1,0 +1,16 @@
+name: Test
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'App name and version (myapp:1.2.3)'
+        required: true
+        default: 'Bob the Builder'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run a one-line script
+        run: echo Deploying, ${{ github.event.inputs.app }}!
