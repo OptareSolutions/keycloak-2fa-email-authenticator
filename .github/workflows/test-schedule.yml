@@ -10,9 +10,6 @@ on:
         description: 'App to deploy (e.g: myapp:2.0.4)'
         required: true
         type: string
-concurrency:
-  group: schedule${{ github.event.inputs.date }}
-  cancel-in-progress: true
 
 jobs:
   schedule:
