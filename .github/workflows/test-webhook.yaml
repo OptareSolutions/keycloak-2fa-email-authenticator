@@ -1,0 +1,33 @@
+name: Deploy App Workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'App to deploy (e.g: myapp:2.0.4)'
+        required: true
+        type: string
+      environment:
+        description: 'Deployment environment (e.g: staging, production)'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+  repository_dispatch:
+    types: [deploy-app]  # Evento que activará el workflow vía Webhook
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtain input values
+        # En API los inputs están en github.event.inputs
+        # En Webhook los inputs vienen en github.event.client-payload
+        run: |
+          echo "App: ${{ github.event.inputs.app || github.event.client_payload.app }}"
+          echo "Environment: ${{ github.event.inputs.environment || github.event.client_payload.environment }}"
+
+      - name: Deploy simulation
+        run: echo "Deploying ${{ github.event.inputs.app || github.event.client_payload.app }} to ${{ github.event.inputs.environment || github.event.client_payload.environment }}"
