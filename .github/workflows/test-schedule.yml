@@ -6,10 +6,18 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
+      date:
+        description: 'Date to run the workflow'
+        required: true
+        type: string
+        default: 'in 1 minute'
       app:
         description: 'App to deploy (e.g: myapp:2.0.4)'
         required: true
         type: string
+concurrency:
+  group: schedule${{ github.event.inputs.date }}
+  cancel-in-progress: true
 
 jobs:
   schedule:
@@ -19,7 +27,7 @@ jobs:
       - uses: austenstone/schedule@v1.3
         with:
           github-token: ${{ secrets.TOKEN }}
-          date: 'at 20:00'
+          date: ${{ github.event.inputs.date }}
           workflow: 'test.yml'
           timezone: 'Europe/Madrid' # US/Central, US/Pacific
           inputs: ${{ toJson(github.event.inputs) }}
