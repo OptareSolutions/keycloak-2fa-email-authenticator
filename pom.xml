@@ -19,8 +19,8 @@
         <maven-jar.plugin.version>3.4.2</maven-jar.plugin.version>
         <sonar.language>java</sonar.language>
         <sonar.java.coveragePlugin>jacoco</sonar.java.coveragePlugin>
-        <jacoco-maven-plugin.version>X.Y.Z</jacoco-maven-plugin.version>
-        <sonar-maven-plugin.version>X.Y.Z</sonar-maven-plugin.version>
+        <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
+        <sonar-maven-plugin.version>5.0.0.4389</sonar-maven-plugin.version>
     </properties>
 
     <dependencies>
