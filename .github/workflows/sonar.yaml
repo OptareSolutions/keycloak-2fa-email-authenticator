@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: self-hosted
+   # runs-on: self-hosted
     steps:
     - name: Checkout del código
       uses: actions/checkout@v4
@@ -21,20 +21,20 @@ jobs:
     - name: Build con Maven
       run: mvn -B package --file pom.xml
       
-    - name: Escaneo con SonarQube
-      env:
-        SONAR_HOST: "http://localhost:9000"
-        SONAR_PROJECT_NAME: "my-sonar-project"
-        SONAR_PROJECT_KEY: "my-sonar-project"
-        SONAR_TOKEN: "sqa_8b0d3e0f2b77ccca6d668acbe2ea430804a34187" # es un sonar poc, no hay problema con enseñar este token
-      run: |
-        mvn sonar:sonar \
-          -Dsonar.host.url=$SONAR_HOST \
-          -Dsonar.projectKey=$SONAR_PROJECT_KEY \
-          -Dsonar.projectName=$SONAR_PROJECT_NAME \
-          -Dsonar.login=$SONAR_TOKEN \
-          -Dsonar.maven.scanAll=true \
-          --no-transfer-progress
+    # - name: Escaneo con SonarQube
+    #   env:
+    #     SONAR_HOST: "http://localhost:9000"
+    #     SONAR_PROJECT_NAME: "my-sonar-project"
+    #     SONAR_PROJECT_KEY: "my-sonar-project"
+    #     SONAR_TOKEN: "sqa_8b0d3e0f2b77ccca6d668acbe2ea430804a34187" # es un sonar poc, no hay problema con enseñar este token
+    #   run: |
+    #     mvn sonar:sonar \
+    #       -Dsonar.host.url=$SONAR_HOST \
+    #       -Dsonar.projectKey=$SONAR_PROJECT_KEY \
+    #       -Dsonar.projectName=$SONAR_PROJECT_NAME \
+    #       -Dsonar.login=$SONAR_TOKEN \
+    #       -Dsonar.maven.scanAll=true \
+    #       --no-transfer-progress
     - name: Enable Pull Request Automerge
       run: gh pr merge --merge --auto "1"
       env:
