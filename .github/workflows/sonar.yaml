@@ -36,9 +36,10 @@ jobs:
     #       -Dsonar.login=$SONAR_TOKEN \
     #       -Dsonar.maven.scanAll=true \
     #       --no-transfer-progress
-    - name: Enable Pull Request Automerge
-      run: gh pr merge --merge --auto "1"
+    - name: Enable auto-merge for Dependabot PRs
+      run: gh pr merge --auto --rebase "$PR_URL"
       env:
-        GH_TOKEN: ${{ secrets.PAT }}
+        PR_URL: ${{github.event.pull_request.html_url}}
+        GITHUB_TOKEN: ${{secrets.PAT}}
 
           
