@@ -35,3 +35,9 @@ jobs:
           -Dsonar.login=$SONAR_TOKEN \
           -Dsonar.maven.scanAll=true \
           --no-transfer-progress
+    - name: Enable Pull Request Automerge
+      run: gh pr merge --merge --auto "1"
+      env:
+        GH_TOKEN: ${{ secrets.PAT }}
+
+          
