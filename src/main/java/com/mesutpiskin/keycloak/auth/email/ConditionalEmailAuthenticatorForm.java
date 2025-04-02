@@ -5,12 +5,17 @@ import static com.mesutpiskin.keycloak.auth.email.ConditionalEmailAuthenticatorF
 import static com.mesutpiskin.keycloak.auth.email.ConditionalEmailAuthenticatorForm.OtpDecision.SKIP_OTP;
 import static org.keycloak.models.utils.KeycloakModelUtils.getRoleFromString;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.security.SecureRandom;
+import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+import io.opentelemetry.api.internal.StringUtils;
+import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.NewCookie;
+import jakarta.ws.rs.core.Response;
 import org.keycloak.authentication.AuthenticationFlowContext;
+import org.keycloak.http.HttpResponse;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleModel;
 import org.keycloak.models.UserModel;
@@ -35,6 +40,19 @@ public class ConditionalEmailAuthenticatorForm extends EmailAuthenticatorForm {
 
     public static final String DEFAULT_OTP_OUTCOME = "defaultOtpOutcome";
 
+    public static final String TRUSTED_DEVICE_ROLE = "trusted_device";
+
+    public static final String TRUSTED_DEVICE_EXPIRATION_ATTRIBUTE = "trusted_device_expiry";
+
+    public static final String TRUSTED_DEVICE_DAYS_ATTRIBUTE = "trusted_device_expiration_days";
+
+    private static final String DEVICE_COOKIE_NAME = "trusted_device_id";
+
+    private static final String TRUSTED_DEVICE_SET_ATTRIBUTE = "trusted_device_ids";
+
+    private static final int DEFAULT_TRUSTED_DAYS = 30; // Dias por defecto
+
+
     enum OtpDecision {
         SKIP_OTP, SHOW_OTP, ABSTAIN
     }
@@ -42,13 +60,37 @@ public class ConditionalEmailAuthenticatorForm extends EmailAuthenticatorForm {
 	@Override
     public void authenticate(AuthenticationFlowContext context) {
 
+        UserModel user = context.getUser();
+
+        RealmModel realm = context.getRealm();
+
         Map<String, String> config = context.getAuthenticatorConfig().getConfig();
 
-        if (tryConcludeBasedOn(voteForUserOtpControlAttribute(context.getUser(), config), context)) {
+        String deviceId = getDeviceIdFromRequest(context);
+
+        // Verificar si el usuario tiene el rol "trusted_device"
+        if (userHasRole(realm, user, TRUSTED_DEVICE_ROLE)) {
+            // Si el dispositivo sigue siendo confiable, omitir MFA
+            if (isTrustedDeviceStillValid(user) && isTrustedDevice(user, deviceId)) {
+                context.success();
+                return;
+            } else if(isTrustedDeviceStillValid(user)){
+                showOtpForm(context);
+                return;
+            } else {
+                // Si ha expirado, eliminar el rol y forzar MFA
+                user.deleteRoleMapping(realm.getRole(TRUSTED_DEVICE_ROLE));
+                user.removeAttribute(TRUSTED_DEVICE_EXPIRATION_ATTRIBUTE);
+                user.removeAttribute(TRUSTED_DEVICE_SET_ATTRIBUTE);
+            }
+        }
+
+
+        if (tryConcludeBasedOn(voteForUserOtpControlAttribute(user, config), context)) {
             return;
         }
 
-        if (tryConcludeBasedOn(voteForUserRole(context.getRealm(), context.getUser(), config), context)) {
+        if (tryConcludeBasedOn(voteForUserRole(realm, user, config), context)) {
             return;
         }
 
@@ -61,6 +103,104 @@ public class ConditionalEmailAuthenticatorForm extends EmailAuthenticatorForm {
         }
 
         showOtpForm(context);
+    }
+
+    private String getDeviceIdFromRequest(AuthenticationFlowContext context) {
+        Cookie cookie = context.getHttpRequest().getHttpHeaders().getCookies().get(DEVICE_COOKIE_NAME);
+        return cookie != null ? cookie.getValue() : null;
+    }
+
+    private boolean isTrustedDevice(UserModel user, String deviceId) {
+        if (deviceId == null || deviceId.isEmpty()) {
+            return false;
+        }
+
+        Set<String> trustedDevices = user.getAttributeStream(TRUSTED_DEVICE_SET_ATTRIBUTE).collect(Collectors.toSet());
+        return trustedDevices.contains(deviceId);
+    }
+
+    private boolean isTrustedDeviceStillValid(UserModel user) {
+        String expiryDateAttr = user.getFirstAttribute(TRUSTED_DEVICE_EXPIRATION_ATTRIBUTE);
+        if (expiryDateAttr == null || expiryDateAttr.isEmpty()) {
+            return false;
+        }
+
+        try {
+            long expiryTimestamp = Long.parseLong(expiryDateAttr);
+            long currentTime = System.currentTimeMillis();
+            return currentTime < expiryTimestamp;
+        } catch (NumberFormatException e) {
+            return false; // Si el valor no es un número válido, forzar MFA
+        }
+    }
+
+    @Override
+    public void action(AuthenticationFlowContext context) {
+        UserModel user = context.getUser();
+        RealmModel realm = context.getRealm();
+
+        // Después de completar MFA, marcar el dispositivo como confiable
+        if (!userHasRole(realm, user, TRUSTED_DEVICE_ROLE)) {
+            RoleModel trustedRole = realm.getRole(TRUSTED_DEVICE_ROLE);
+            if (trustedRole != null) {
+                user.grantRole(trustedRole);
+            }
+        }
+        // Obtener el ID del dispositivo desde la cookie
+        String deviceId = getDeviceIdFromRequest(context);
+        Set<String> trustedDevices = new HashSet<>(user.getAttributeStream(TRUSTED_DEVICE_SET_ATTRIBUTE).collect(Collectors.toSet()));
+
+        // Si el deviceId ya existe, no se genera uno nuevo
+        if (deviceId == null || deviceId.isEmpty() || !trustedDevices.contains(deviceId)) {
+            deviceId = generateNewDeviceId(); // Solo se genera si no existe
+            trustedDevices.add(deviceId);
+            user.setAttribute(TRUSTED_DEVICE_SET_ATTRIBUTE, new ArrayList<>(trustedDevices));
+
+            // Crear la cookie solo si no existe
+            boolean isSecure = context.getSession().getContext().getUri().getBaseUri().getScheme().equals("https");
+            NewCookie cookie = new NewCookie(
+                    DEVICE_COOKIE_NAME, deviceId, "/", null, "Trusted Device",
+                    getTrustedDeviceExpirationDays(user) * 24 * 60 * 60,
+                    true,
+                    isSecure
+            );
+
+            HttpResponse response = context.getSession().getContext().getHttpResponse();
+            response.setCookieIfAbsent(cookie);
+        }
+
+        // Verificar si el usuario ya tiene una fecha de expiración
+        String expiryAttr = user.getFirstAttribute(TRUSTED_DEVICE_EXPIRATION_ATTRIBUTE);
+
+        if (StringUtils.isNullOrEmpty(expiryAttr)) {
+            // Si no hay fecha de expiración, establecerla por primera vez
+            int expirationDays = getTrustedDeviceExpirationDays(user);
+            setTrustedDeviceExpiry(user, expirationDays);
+        }
+
+        context.success();
+    }
+
+    private String generateNewDeviceId() {
+        byte[] randomBytes = new byte[16];
+        new SecureRandom().nextBytes(randomBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    private int getTrustedDeviceExpirationDays(UserModel user) {
+        String daysAttr = user.getFirstAttribute(TRUSTED_DEVICE_DAYS_ATTRIBUTE);
+
+        if (StringUtils.isNullOrEmpty(daysAttr)) {
+            user.setSingleAttribute(TRUSTED_DEVICE_DAYS_ATTRIBUTE, String.valueOf(DEFAULT_TRUSTED_DAYS));
+            return DEFAULT_TRUSTED_DAYS;
+        }
+
+        return Integer.parseInt(daysAttr);
+    }
+
+    private void setTrustedDeviceExpiry(UserModel user, int expirationDays) {
+        long expiryTimestamp = System.currentTimeMillis() + (expirationDays * 24 * 60 * 60 * 1000L);
+        user.setSingleAttribute(TRUSTED_DEVICE_EXPIRATION_ATTRIBUTE, String.valueOf(expiryTimestamp));
     }
 
     private OtpDecision voteForDefaultFallback(Map<String, String> config) {
